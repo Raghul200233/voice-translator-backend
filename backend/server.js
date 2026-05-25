@@ -3,35 +3,45 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const multer = require('multer');
 const path = require('path');
-const mongoose = require('mongoose');
 const fs = require('fs');
-const dns = require('dns');
+const mongoose = require('mongoose');
 
-dns.setDefaultResultOrder('ipv4first');
-
-// Load environment variables
 dotenv.config();
 
-// Import routes
-const transcriptionRoutes = require('./routes/transcriptionRoutes');
-
 const app = express();
-
-// Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Create uploads directory if it doesn't exist
+// Import models and routes
+const EnhancedTranscription = require('./models/EnhancedTranscription');
+const enhancedTranscriptionRoutes = require('./routes/enhancedTranscriptionRoutes');
+
+// MongoDB Connection
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('✅ MongoDB Connected Successfully');
+    console.log(`📚 Database: ${mongoose.connection.name}`);
+    
+    // Create indexes
+    await EnhancedTranscription.init();
+    console.log('✅ Database indexes created');
+  } catch (error) {
+    console.error('❌ MongoDB Connection Error:', error.message);
+    process.exit(1);
+  }
+};
+
+connectDB();
+
+// Setup uploads directory
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
+  destination: (req, file, cb) => cb(null, 'uploads/'),
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
@@ -39,150 +49,136 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({
-  storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/mp4', 'audio/webm', 'audio/m4a'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only audio files are allowed.'));
-    }
+    const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/webm', 'audio/m4a'];
+    cb(null, allowedTypes.includes(file.mimetype));
   }
 });
 
-// MongoDB Connection - FIXED (removed deprecated options)
-const connectDB = async () => {
-  try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/speech_to_text';
-    
-    // Simple connection without deprecated options
-    await mongoose.connect(mongoURI);
-    
-    console.log('✅ MongoDB Connected Successfully');
-    console.log(`📚 Database: ${mongoose.connection.name}`);
-    console.log(`🔗 Host: ${mongoose.connection.host}`);
-  } catch (error) {
-    console.error('❌ MongoDB Connection Error:', error.message);
-    console.log('⚠️  Continuing without database... Transcriptions will not be saved');
-  }
-};
-
-// Connect to database
-connectDB();
-
-// Handle MongoDB connection events
-mongoose.connection.on('error', err => {
-  console.error('MongoDB connection error:', err.message);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('MongoDB disconnected');
-});
-
-// Health check endpoint
+// Health check
 app.get('/api/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  res.json({ 
-    status: 'OK', 
-    message: 'Server is running',
+  res.json({
+    status: 'OK',
+    version: '2.0',
     database: dbStatus,
+    features: ['categories', 'tags', 'favorites', 'search', 'statistics', 'sharing'],
     timestamp: new Date().toISOString()
   });
 });
 
-// Transcription routes
-app.use('/api/transcriptions', transcriptionRoutes);
-
-// Upload and transcribe endpoint
+// Transcribe endpoint with enhanced metadata
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file uploaded' });
     }
-
-    // This is a placeholder - Whisper API will be integrated on Day 4
-    const mockTranscription = `This is a mock transcription for testing. File: ${req.file.originalname}. 
-    The actual Whisper API integration will be implemented on Day 4. 
-    For now, the file has been uploaded successfully.`;
-
-    // Save to database if MongoDB is connected
-    let savedTranscription = null;
-    if (mongoose.connection.readyState === 1) {
-      try {
-        const Transcription = require('./models/Transcription');
-        savedTranscription = new Transcription({
-          text: mockTranscription,
-          fileName: req.file.originalname,
-          fileType: req.file.mimetype,
-          fileSize: req.file.size,
-          duration: null,
-          confidence: null
-        });
-        await savedTranscription.save();
-        console.log('✅ Transcription saved to database:', savedTranscription._id);
-      } catch (dbError) {
-        console.error('Database save error:', dbError.message);
-      }
-    }
-
+    
+    // Mock transcription (will be replaced with Whisper API on Day 4)
+    const mockTranscription = `This is a simulated transcription for "${req.file.originalname}" at ${new Date().toLocaleString()}. 
+    The OpenAI Whisper API will be integrated on Day 4 for accurate speech recognition.`;
+    
+    // Create enhanced transcription document
+    const transcription = new EnhancedTranscription({
+      text: mockTranscription,
+      fileName: req.file.originalname,
+      fileType: req.file.mimetype,
+      fileSize: req.file.size,
+      language: 'en',
+      category: 'other',
+      tags: ['upload', 'pending'],
+      processingTime: Date.now() - startTime,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    });
+    
+    await transcription.save();
+    
     res.json({
       success: true,
       transcription: mockTranscription,
-      file: {
-        name: req.file.originalname,
-        size: req.file.size,
-        path: req.file.path
+      metadata: {
+        wordCount: transcription.wordCount,
+        uniqueWords: transcription.uniqueWords,
+        processingTime: transcription.processingTime,
+        category: transcription.category,
+        tags: transcription.tags
       },
-      savedToDatabase: savedTranscription ? true : false,
-      transcriptionId: savedTranscription?._id
+      savedToDatabase: true,
+      transcriptionId: transcription._id
     });
+    
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get all transcriptions from database
-app.get('/api/transcriptions/list', async (req, res) => {
+// Get shared transcription
+app.get('/api/shared/:token', async (req, res) => {
   try {
-    if (mongoose.connection.readyState !== 1) {
-      return res.status(503).json({ 
-        success: false,
-        error: 'Database not connected. Please check MongoDB connection.',
-        data: []
-      });
+    const { token } = req.params;
+    const transcription = await EnhancedTranscription.findOne({ 
+      shareToken: token,
+      isPublic: true 
+    });
+    
+    if (!transcription) {
+      return res.status(404).json({ error: 'Shared transcription not found' });
     }
     
-    const Transcription = require('./models/Transcription');
-    const transcriptions = await Transcription.find().sort({ createdAt: -1 });
+    res.json({
+      success: true,
+      data: {
+        text: transcription.text,
+        fileName: transcription.fileName,
+        createdAt: transcription.createdAt,
+        wordCount: transcription.wordCount
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Use enhanced routes
+app.use('/api/enhanced/transcriptions', enhancedTranscriptionRoutes);
+
+// Legacy endpoint for backward compatibility
+app.get('/api/transcriptions', async (req, res) => {
+  try {
+    const transcriptions = await EnhancedTranscription.find({})
+      .sort({ createdAt: -1 })
+      .limit(50);
     
     res.json({
       success: true,
       data: transcriptions
     });
   } catch (error) {
-    console.error('Error fetching transcriptions:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: err.message || 'Something went wrong!' });
-});
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
-
 const PORT = process.env.PORT || 5000;
-
 app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🎤 Transcribe endpoint: http://localhost:${PORT}/api/transcribe`);
-  console.log(`📝 Transcriptions: http://localhost:${PORT}/api/transcriptions/list\n`);
+  console.log('\n' + '='.repeat(60));
+  console.log('🚀 ENHANCED SPEECH-TO-TEXT SERVER (MongoDB)');
+  console.log('='.repeat(60));
+  console.log(`📍 Server URL: http://localhost:${PORT}`);
+  console.log(`✅ Database: MongoDB with Enhanced Schema`);
+  console.log(`📊 Features:`);
+  console.log(`   - Categories & Tags Organization`);
+  console.log(`   - Favorites & Color Coding`);
+  console.log(`   - Full-Text Search`);
+  console.log(`   - Statistics & Analytics`);
+  console.log(`   - Pagination & Filtering`);
+  console.log(`   - Bulk Operations`);
+  console.log(`   - Shareable Links`);
+  console.log(`   - Edit History Tracking`);
+  console.log('='.repeat(60) + '\n');
 });
