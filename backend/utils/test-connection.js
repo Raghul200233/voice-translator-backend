@@ -1,90 +1,48 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const testConnection = async () => {
-  console.log('🔄 Testing MongoDB Atlas connection...');
-  console.log('📡 Connection string (hidden password):', 
-    process.env.MONGODB_URI?.replace(/:[^:@]*@/, ':****@'));
+const testConnections = async () => {
+  const connections = [
+    {
+      name: 'Standard TCP (Recommended)',
+      uri: 'mongodb://rahulsls332002_db_user:IdMUF9FUExROdtvs@cluster0.qkuysrk.mongodb.net:27017/voice-to-text?authSource=admin&retryWrites=true&w=majority'
+    },
+    {
+      name: 'With replicaSet',
+      uri: 'mongodb://rahulsls332002_db_user:IdMUF9FUExROdtvs@cluster0.qkuysrk.mongodb.net:27017,cluster0.qkuysrk.mongodb.net:27018,cluster0.qkuysrk.mongodb.net:27019/voice-to-text?authSource=admin&replicaSet=atlas-xyz&retryWrites=true&w=majority'
+    },
+    {
+      name: 'Direct connection',
+      uri: 'mongodb://rahulsls332002_db_user:IdMUF9FUExROdtvs@cluster0-shard-00-00.qkuysrk.mongodb.net:27017,cluster0-shard-00-01.qkuysrk.mongodb.net:27017,cluster0-shard-00-02.qkuysrk.mongodb.net:27017/voice-to-text?authSource=admin&replicaSet=atlas-xyz&ssl=true&retryWrites=true&w=majority'
+    }
+  ];
   
-  try {
-    // Add connection options for better reliability
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000, // 10 seconds
-      socketTimeoutMS: 45000,
-    });
+  for (const conn of connections) {
+    console.log(`\n🔄 Testing: ${conn.name}`);
+    console.log(`📡 URI: ${conn.uri.replace(/:[^:@]*@/, ':****@')}`);
     
-    console.log('✅ Connected to MongoDB Atlas successfully!');
-    
-    // Get connection info
-    const db = mongoose.connection;
-    console.log(`📚 Database name: ${db.name}`);
-    console.log(`🔗 Host: ${db.host}`);
-    
-    // Test creating a collection
-    const testSchema = new mongoose.Schema({
-      testMessage: String,
-      timestamp: { type: Date, default: Date.now }
-    });
-    
-    const TestModel = mongoose.model('ConnectionTest', testSchema);
-    
-    // Insert test document
-    const testDoc = new TestModel({ testMessage: 'Hello from Speech-to-Text App!' });
-    await testDoc.save();
-    console.log('✅ Test document created with ID:', testDoc._id);
-    
-    // Retrieve test document
-    const found = await TestModel.findById(testDoc._id);
-    console.log('✅ Test document retrieved:', found.testMessage);
-    
-    // Clean up
-    await TestModel.deleteMany({});
-    console.log('✅ Test data cleaned up');
-    
-    // Close connection
-    await mongoose.disconnect();
-    console.log('🔌 Connection closed');
-    console.log('\n🎉 MongoDB Atlas is working perfectly!');
-    console.log('\n📝 Next steps:');
-    console.log('1. Run `npm run dev` to start the server');
-    console.log('2. Start frontend with `cd ../frontend && npm run dev`');
-    console.log('3. Upload audio files and see them saved to database');
-    
-    process.exit(0);
-  } catch (error) {
-    console.error('\n❌ Connection failed:', error.message);
-    
-    if (error.message.includes('bad auth')) {
-      console.log('\n🔑 Authentication Error:');
-      console.log('   - Check username and password in connection string');
-      console.log('   - Make sure the database user exists in MongoDB Atlas');
-      console.log('   - Verify password is correct (no special characters need encoding)');
+    try {
+      await mongoose.connect(conn.uri, {
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000
+      });
+      
+      console.log(`✅ SUCCESS! Connected to: ${mongoose.connection.name}`);
+      console.log(`📚 Database: ${mongoose.connection.db.databaseName}`);
+      
+      await mongoose.disconnect();
+      console.log(`\n🎉 WORKING CONNECTION STRING:\n${conn.uri}\n`);
+      process.exit(0);
+      
+    } catch (error) {
+      console.log(`❌ Failed: ${error.message}`);
+      await mongoose.disconnect().catch(() => {});
     }
-    
-    if (error.message.includes('ENOTFOUND') || error.message.includes('getaddrinfo')) {
-      console.log('\n🌐 Network Error:');
-      console.log('   - Check your internet connection');
-      console.log('   - Verify the cluster name is correct');
-      console.log('   - Make sure you\'re not behind a firewall');
-    }
-    
-    if (error.message.includes('timed out')) {
-      console.log('\n⏱️  Timeout Error:');
-      console.log('   - Check Network Access in MongoDB Atlas');
-      console.log('   - Add your IP address to whitelist');
-      console.log('   - Or enable "Allow Access from Anywhere"');
-    }
-    
-    console.log('\n🔧 Quick Fixes:');
-    console.log('1. Go to MongoDB Atlas -> Network Access -> Add IP Address');
-    console.log('2. Add 0.0.0.0/0 (Allow from anywhere) for testing');
-    console.log('3. Verify database user has read/write permissions');
-    console.log('4. Check that cluster is active (not paused)');
-    
-    process.exit(1);
   }
+  
+  console.log('\n⚠️  All connection attempts failed.');
+  console.log('\n💡 ALTERNATIVE SOLUTION: Use the server with in-memory storage');
+  console.log('   Your server will still work without MongoDB!\n');
 };
 
-testConnection();
+testConnections();
