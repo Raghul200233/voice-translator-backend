@@ -34,17 +34,9 @@ const transcriptionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: null
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
 }, {
-  timestamps: true
+  timestamps: true // This automatically adds createdAt and updatedAt
 });
 
 // Index for faster queries

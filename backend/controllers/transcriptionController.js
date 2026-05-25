@@ -1,6 +1,4 @@
 const Transcription = require('../models/Transcription');
-const fs = require('fs');
-const path = require('path');
 
 // Create new transcription
 const createTranscription = async (req, res) => {
@@ -15,7 +13,7 @@ const createTranscription = async (req, res) => {
       duration,
       language,
       confidence,
-      userId: req.userId || null // Will be set when authentication is implemented
+      userId: req.userId || null
     });
     
     await transcription.save();
@@ -81,14 +79,6 @@ const getTranscriptionById = async (req, res) => {
       });
     }
     
-    // Check if user owns this transcription (if authentication is enabled)
-    if (req.userId && transcription.userId && transcription.userId.toString() !== req.userId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied'
-      });
-    }
-    
     res.json({
       success: true,
       data: transcription
@@ -117,8 +107,6 @@ const updateTranscription = async (req, res) => {
     }
     
     transcription.text = text || transcription.text;
-    transcription.updatedAt = Date.now();
-    
     await transcription.save();
     
     res.json({
@@ -172,27 +160,11 @@ const getStatistics = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(5);
     
-    // Get last 7 days data
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
-    const weeklyData = await Transcription.aggregate([
-      { $match: { ...query, createdAt: { $gte: sevenDaysAgo } } },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
-    
     res.json({
       success: true,
       data: {
         totalTranscriptions,
-        recentTranscriptions,
-        weeklyData
+        recentTranscriptions
       }
     });
   } catch (error) {

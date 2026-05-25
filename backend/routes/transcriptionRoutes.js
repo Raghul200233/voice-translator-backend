@@ -11,7 +11,6 @@ const {
 
 // Middleware for authentication (will be implemented on Day 10)
 const authMiddleware = (req, res, next) => {
-  // Temporary - will be replaced with actual JWT verification
   req.userId = null;
   next();
 };

@@ -5,6 +5,9 @@ const multer = require('multer');
 const path = require('path');
 const mongoose = require('mongoose');
 const fs = require('fs');
+const dns = require('dns');
+
+dns.setDefaultResultOrder('ipv4first');
 
 // Load environment variables
 dotenv.config();
@@ -48,19 +51,17 @@ const upload = multer({
   }
 });
 
-// MongoDB Connection
+// MongoDB Connection - FIXED (removed deprecated options)
 const connectDB = async () => {
   try {
-    const mongoURI = process.env.MONGODB_URI;
+    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/speech_to_text';
     
-    await mongoose.connect(mongoURI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    // Simple connection without deprecated options
+    await mongoose.connect(mongoURI);
     
     console.log('✅ MongoDB Connected Successfully');
-    console.log(`Database: ${mongoose.connection.name}`);
-    console.log(`Host: ${mongoose.connection.host}`);
+    console.log(`📚 Database: ${mongoose.connection.name}`);
+    console.log(`🔗 Host: ${mongoose.connection.host}`);
   } catch (error) {
     console.error('❌ MongoDB Connection Error:', error.message);
     console.log('⚠️  Continuing without database... Transcriptions will not be saved');
@@ -72,7 +73,7 @@ connectDB();
 
 // Handle MongoDB connection events
 mongoose.connection.on('error', err => {
-  console.error('MongoDB connection error:', err);
+  console.error('MongoDB connection error:', err.message);
 });
 
 mongoose.connection.on('disconnected', () => {
@@ -101,25 +102,28 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     }
 
     // This is a placeholder - Whisper API will be integrated on Day 4
-    // For now, we'll return a mock transcription
-    const mockTranscription = `This is a mock transcription for testing. File: ${req.file.filename}. 
+    const mockTranscription = `This is a mock transcription for testing. File: ${req.file.originalname}. 
     The actual Whisper API integration will be implemented on Day 4. 
-    For now, the file has been uploaded successfully and would be transcribed by AI.`;
+    For now, the file has been uploaded successfully.`;
 
     // Save to database if MongoDB is connected
     let savedTranscription = null;
     if (mongoose.connection.readyState === 1) {
-      const Transcription = require('./models/Transcription');
-      savedTranscription = new Transcription({
-        text: mockTranscription,
-        fileName: req.file.originalname,
-        fileType: req.file.mimetype,
-        fileSize: req.file.size,
-        duration: null,
-        confidence: null
-      });
-      await savedTranscription.save();
-      console.log('Transcription saved to database:', savedTranscription._id);
+      try {
+        const Transcription = require('./models/Transcription');
+        savedTranscription = new Transcription({
+          text: mockTranscription,
+          fileName: req.file.originalname,
+          fileType: req.file.mimetype,
+          fileSize: req.file.size,
+          duration: null,
+          confidence: null
+        });
+        await savedTranscription.save();
+        console.log('✅ Transcription saved to database:', savedTranscription._id);
+      } catch (dbError) {
+        console.error('Database save error:', dbError.message);
+      }
     }
 
     res.json({
@@ -140,11 +144,13 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 });
 
 // Get all transcriptions from database
-app.get('/api/transcriptions', async (req, res) => {
+app.get('/api/transcriptions/list', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
       return res.status(503).json({ 
-        error: 'Database not connected. Please check MongoDB connection.' 
+        success: false,
+        error: 'Database not connected. Please check MongoDB connection.',
+        data: []
       });
     }
     
@@ -157,7 +163,7 @@ app.get('/api/transcriptions', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching transcriptions:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -178,5 +184,5 @@ app.listen(PORT, () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🎤 Transcribe endpoint: http://localhost:${PORT}/api/transcribe`);
-  console.log(`📝 Transcriptions: http://localhost:${PORT}/api/transcriptions\n`);
+  console.log(`📝 Transcriptions: http://localhost:${PORT}/api/transcriptions/list\n`);
 });
