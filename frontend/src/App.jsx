@@ -17,7 +17,7 @@ function App() {
 
   const checkDatabaseStatus = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/health');
+      const response = await fetch('http://localhost:5003/api/health');
       const data = await response.json();
       setDbStatus(data.database === 'connected' ? 'connected' : 'disconnected');
     } catch (error) {
@@ -27,7 +27,7 @@ function App() {
 
   const fetchTranscriptions = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/transcriptions');
+      const response = await fetch('http://localhost:5003/api/transcriptions');
       const data = await response.json();
       if (data.success && data.data) {
         const formattedData = data.data.map(item => ({
@@ -53,7 +53,7 @@ function App() {
     formData.append('audio', file);
 
     try {
-      const response = await fetch('http://localhost:5000/api/transcribe', {
+      const response = await fetch('http://localhost:5003/api/transcribe', {
         method: 'POST',
         body: formData,
       });
@@ -91,7 +91,7 @@ function App() {
 
         setLoading(true);
         try {
-          const response = await fetch('http://localhost:5000/api/transcribe', {
+          const response = await fetch('http://localhost:5003/api/transcribe', {
             method: 'POST',
             body: formData,
           });

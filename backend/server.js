@@ -1,260 +1,211 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const Groq = require('groq-sdk');
+const mongoose = require('mongoose');
 
 const app = express();
-
-// Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Create uploads directory
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
-  console.log('✅ Uploads directory created');
-}
+// MongoDB Schema
+const transcriptionSchema = new mongoose.Schema({
+    text: { type: String, required: true },
+    fileName: { type: String, required: true },
+    fileSize: { type: Number },
+    createdAt: { type: Date, default: Date.now }
+});
 
-// Configure multer for file uploads
+const Transcription = mongoose.model('Transcription', transcriptionSchema);
+
+// MongoDB Connection with better options
+const connectDB = async () => {
+    try {
+        // Try to connect to local MongoDB first
+        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/speech_to_text';
+        
+        await mongoose.connect(mongoURI, {
+            serverSelectionTimeoutMS: 5000,
+            connectTimeoutMS: 10000,
+        });
+        
+        console.log('✅ MongoDB Connected Successfully');
+        return true;
+    } catch (error) {
+        console.log('⚠️ MongoDB not available, using in-memory storage');
+        return false;
+    }
+};
+
+// In-memory fallback
+let inMemoryTranscriptions = [];
+
+// Initialize Groq
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+});
+
+// Configure multer
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname);
-    cb(null, uniqueName);
-  }
+    destination: (req, file, cb) => cb(null, 'uploads/'),
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
 });
 
 const upload = multer({
-  storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/webm', 'audio/m4a', 'audio/mp4'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only audio files are allowed.'));
+    storage,
+    limits: { fileSize: 25 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/webm', 'audio/m4a'];
+        cb(null, allowedTypes.includes(file.mimetype));
     }
-  }
 });
 
-// In-memory storage for transcriptions
-let transcriptions = [];
-
-// ============= ROUTES =============
-
-// Root route - This fixes the "Cannot GET /" error
-app.get('/', (req, res) => {
-  res.json({
-    message: '🎙️ Speech-to-Text API Server',
-    version: '1.0.0',
-    status: 'Running',
-    port: 5003,
-    endpoints: {
-      'API Information': {
-        'GET /': 'This information',
-        'GET /api/health': 'Check server health status'
-      },
-      'Transcription Endpoints': {
-        'POST /api/transcribe': 'Upload audio file for transcription',
-        'GET /api/transcriptions': 'Get all transcriptions',
-        'GET /api/transcriptions/:id': 'Get specific transcription',
-        'DELETE /api/transcriptions/:id': 'Delete a transcription'
-      }
-    },
-    timestamp: new Date().toISOString()
-  });
-});
+if (!fs.existsSync('uploads')) {
+    fs.mkdirSync('uploads');
+}
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    message: 'Server is running successfully!',
-    port: 5003,
-    uptime: process.uptime(),
-    memoryUsage: process.memoryUsage(),
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Transcribe endpoint - Upload audio
-app.post('/api/transcribe', upload.single('audio'), (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'No audio file uploaded' 
-      });
-    }
-
-    // Create transcription text
-    const transcriptionText = `[${new Date().toLocaleString()}] 
-    Transcription for file: "${req.file.originalname}"
-    File size: ${(req.file.size / 1024).toFixed(2)} KB
-    File type: ${req.file.mimetype}
-    
-    This is a simulated transcription. The OpenAI Whisper API will be integrated on Day 4.
-    The actual AI-powered transcription will provide accurate speech-to-text conversion.`;
-
-    // Save to memory
-    const newTranscription = {
-      id: Date.now(),
-      text: transcriptionText,
-      fileName: req.file.originalname,
-      fileType: req.file.mimetype,
-      fileSize: req.file.size,
-      createdAt: new Date().toISOString(),
-      wordCount: transcriptionText.split(/\s+/).length
-    };
-
-    transcriptions.unshift(newTranscription);
-    
-    console.log(`✅ Transcription saved: ${req.file.originalname} (ID: ${newTranscription.id})`);
-    console.log(`📊 Total transcriptions: ${transcriptions.length}`);
-
+app.get('/api/health', async (req, res) => {
+    const dbStatus = mongoose.connection.readyState === 1;
     res.json({
-      success: true,
-      message: 'Audio processed successfully',
-      transcription: transcriptionText,
-      metadata: {
-        id: newTranscription.id,
-        fileName: newTranscription.fileName,
-        fileSize: (newTranscription.fileSize / 1024).toFixed(2) + ' KB',
-        wordCount: newTranscription.wordCount,
-        createdAt: newTranscription.createdAt
-      }
+        status: 'OK',
+        database: dbStatus ? 'connected' : 'disconnected',
+        storage: dbStatus ? 'MongoDB' : 'In-Memory',
+        groq: !!process.env.GROQ_API_KEY,
+        timestamp: new Date().toISOString()
     });
-  } catch (error) {
-    console.error('Error processing audio:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
 });
 
-// Get all transcriptions
-app.get('/api/transcriptions', (req, res) => {
-  res.json({
-    success: true,
-    count: transcriptions.length,
-    data: transcriptions
-  });
-});
+// Transcribe endpoint
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No audio file uploaded' });
+        }
 
-// Get single transcription by ID
-app.get('/api/transcriptions/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const transcription = transcriptions.find(t => t.id === id);
-  
-  if (!transcription) {
-    return res.status(404).json({ 
-      success: false, 
-      error: 'Transcription not found' 
-    });
-  }
-  
-  res.json({
-    success: true,
-    data: transcription
-  });
-});
+        console.log(`🎤 Processing: ${req.file.originalname}`);
 
-// Delete transcription by ID
-app.delete('/api/transcriptions/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const index = transcriptions.findIndex(t => t.id === id);
-  
-  if (index === -1) {
-    return res.status(404).json({ 
-      success: false, 
-      error: 'Transcription not found' 
-    });
-  }
-  
-  const deleted = transcriptions.splice(index, 1);
-  res.json({
-    success: true,
-    message: 'Transcription deleted successfully',
-    deleted: deleted[0]
-  });
-});
+        // Call Groq Whisper API
+        const audioStream = fs.createReadStream(req.file.path);
+        const transcription = await groq.audio.transcriptions.create({
+            file: audioStream,
+            model: "whisper-large-v3-turbo",
+            language: "en",
+            response_format: "json",
+        });
 
-// Clear all transcriptions
-app.delete('/api/transcriptions', (req, res) => {
-  const count = transcriptions.length;
-  transcriptions = [];
-  res.json({
-    success: true,
-    message: `Cleared ${count} transcriptions`
-  });
-});
+        console.log(`✅ Transcribed: ${transcription.text.substring(0, 50)}...`);
 
-// 404 handler for undefined routes
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Route not found',
-    message: `Cannot ${req.method} ${req.url}`,
-    availableEndpoints: {
-      'GET /': 'API information',
-      'GET /api/health': 'Health check',
-      'POST /api/transcribe': 'Upload audio',
-      'GET /api/transcriptions': 'Get all transcriptions',
-      'GET /api/transcriptions/:id': 'Get one transcription',
-      'DELETE /api/transcriptions/:id': 'Delete transcription',
-      'DELETE /api/transcriptions': 'Clear all transcriptions'
+        let savedDoc = null;
+        let dbUsed = false;
+
+        // Try to save to MongoDB if connected
+        if (mongoose.connection.readyState === 1) {
+            try {
+                savedDoc = await Transcription.create({
+                    text: transcription.text,
+                    fileName: req.file.originalname,
+                    fileSize: req.file.size,
+                });
+                dbUsed = true;
+                console.log(`💾 Saved to MongoDB: ${savedDoc._id}`);
+            } catch (dbError) {
+                console.log('MongoDB save failed, using in-memory');
+            }
+        }
+
+        // Fallback to in-memory
+        if (!savedDoc) {
+            savedDoc = {
+                id: Date.now(),
+                text: transcription.text,
+                fileName: req.file.originalname,
+                fileSize: req.file.size,
+                createdAt: new Date(),
+            };
+            inMemoryTranscriptions.unshift(savedDoc);
+            console.log(`💾 Saved to memory: ${savedDoc.id}`);
+        }
+
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+
+        res.json({
+            success: true,
+            transcription: transcription.text,
+            savedToDatabase: dbUsed,
+            storage: dbUsed ? 'MongoDB' : 'In-Memory',
+            id: savedDoc._id || savedDoc.id
+        });
+
+    } catch (error) {
+        console.error('Error:', error);
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        res.status(500).json({ error: error.message });
     }
-  });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Server error:', err);
-  res.status(500).json({
-    success: false,
-    error: err.message || 'Internal server error'
-  });
+// Get transcriptions endpoint
+app.get('/api/transcriptions', async (req, res) => {
+    try {
+        let transcriptions = [];
+        
+        // Try to get from MongoDB first
+        if (mongoose.connection.readyState === 1) {
+            transcriptions = await Transcription.find().sort({ createdAt: -1 }).limit(50);
+        } else {
+            transcriptions = inMemoryTranscriptions;
+        }
+        
+        res.json({
+            success: true,
+            data: transcriptions,
+            count: transcriptions.length,
+            storage: mongoose.connection.readyState === 1 ? 'MongoDB' : 'In-Memory'
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete transcription endpoint
+app.delete('/api/transcriptions/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        
+        if (mongoose.connection.readyState === 1) {
+            await Transcription.findByIdAndDelete(id);
+        } else {
+            const index = inMemoryTranscriptions.findIndex(t => t.id == id);
+            if (index !== -1) inMemoryTranscriptions.splice(index, 1);
+        }
+        
+        res.json({ success: true, message: 'Deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Start server
-const PORT = 5003;
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log('\n' + '='.repeat(60));
-  console.log('🎙️  SPEECH-TO-TEXT API SERVER');
-  console.log('='.repeat(60));
-  console.log(`✅ Server is running on port: ${PORT}`);
-  console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`❤️  Health: http://localhost:${PORT}/api/health`);
-  console.log(`📡 API Info: http://localhost:${PORT}/`);
-  console.log(`🎤 Upload: POST http://localhost:${PORT}/api/transcribe`);
-  console.log(`📝 History: GET http://localhost:${PORT}/api/transcriptions`);
-  console.log('='.repeat(60));
-  console.log('✨ Ready to accept audio transcriptions!');
-  console.log('='.repeat(60) + '\n');
-});
+const PORT = process.env.PORT || 5003;
 
-// Handle server errors
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`\n❌ Port ${PORT} is already in use!`);
-    console.log('Please free up the port and try again.\n');
-  } else {
-    console.error('Server error:', error);
-  }
+// Connect to database and start server
+connectDB().then(() => {
+    app.listen(PORT, () => {
+        console.log('\n' + '='.repeat(50));
+        console.log('🎙️ Speech-to-Text Server');
+        console.log('='.repeat(50));
+        console.log(`📍 http://localhost:${PORT}`);
+        console.log(`✅ Groq API Ready`);
+        console.log(`💾 Database: ${mongoose.connection.readyState === 1 ? 'MongoDB Connected' : 'In-Memory Mode'}`);
+        console.log('='.repeat(50) + '\n');
+    });
 });
-
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n\n👋 Shutting down server gracefully...');
-  server.close(() => {
-    console.log('✅ Server closed');
-    process.exit(0);
-  });
-});
-
-module.exports = app;
