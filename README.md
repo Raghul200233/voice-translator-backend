@@ -55,7 +55,7 @@ text
 http://localhost:5173
 ```
 ```
-##🔧 Environment Variables
+## 🔧 Environment Variables
 Backend (.env)
 env
 PORT=5003
@@ -68,7 +68,7 @@ env
 VITE_API_URL=http://localhost:5003/api
 ```
 ```
-##📡 API Endpoints
+## 📡 API Endpoints
 Method	Endpoint	Description
 GET	/api/health	Health check
 POST	/api/transcribe	Upload audio for transcription
@@ -79,7 +79,7 @@ DELETE	/api/transcriptions/:id	Delete transcription
 GET	/api/statistics	Get usage statistics
 ```
 ```
-##🚢 Deployment
+## 🚢 Deployment
 Backend (Render)
 Push code to GitHub
 Create new Web Service on Render
@@ -93,7 +93,7 @@ Run vercel in frontend directory
 Set VITE_API_URL environment variable
 ```
 ```
-##📁 Project Structure
+## 📁 Project Structure
 speech-to-text-app/
 ├── backend/
 │   ├── middleware/
@@ -110,14 +110,14 @@ speech-to-text-app/
 └── README.md
 ```
 
-##🎯 Features Demo
+## 🎯 Features Demo
 Upload Audio: Click "Upload Audio" and select an MP3/WAV file
 Record Audio: Click "Start Recording" and speak
 View Results: Transcription appears instantly
 Manage: Edit, favorite, or delete transcriptions
 Filter: Use categories and search to find transcriptions
 
-##⚠️ Error Handling
+## ⚠️ Error Handling
 The application handles various error scenarios:
 Invalid file types
 File size exceeding limits (25MB)
@@ -125,10 +125,10 @@ API rate limiting (30 requests/minute)
 Network connectivity issues
 Database connection failures
 
-##📄 License
+## 📄 License
 MIT License - feel free to use this project for learning or production!
 
-##🙏 Acknowledgments
+## 🙏 Acknowledgments
 Groq for free Whisper API access
 OpenAI for Whisper model
 Tailwind CSS for styling
