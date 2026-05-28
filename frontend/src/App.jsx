@@ -192,7 +192,7 @@ function App() {
                 className={`bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 transition ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <Mic className="w-5 h-5" />
-                Start Recording (10s)
+                Start Recording (15s)
               </button>
             ) : (
               <button 
@@ -208,7 +208,7 @@ function App() {
             <div className="mt-4 p-3 bg-red-50 rounded-lg">
               <p className="text-red-600 flex items-center gap-2">
                 <span className="animate-pulse">🔴</span>
-                Recording... Maximum 10 seconds
+                Recording... Maximum 15 seconds
               </p>
             </div>
           )}

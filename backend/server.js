@@ -26,7 +26,7 @@ const Transcription = mongoose.model('Transcription', transcriptionSchema);
 const connectDB = async () => {
     try {
         // Try to connect to local MongoDB first
-        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/speech_to_text';
+        const mongoURI = process.env.MONGODB_URI;
         
         await mongoose.connect(mongoURI, {
             serverSelectionTimeoutMS: 5000,
