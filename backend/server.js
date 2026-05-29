@@ -7,10 +7,10 @@ const path = require('path');
 const fs = require('fs');
 const Groq = require('groq-sdk');
 const mongoose = require('mongoose');
-
 const app = express();
+
 app.use(cors({
-    origin: 'https://speech-to-text-chi-lac.vercel.app'
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173' 
 }));
 app.use(express.json());
 
