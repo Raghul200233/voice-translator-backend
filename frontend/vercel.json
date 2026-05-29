@@ -6,6 +6,6 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "env": {
-    "VITE_API_URL": "https://your-render-backend-url.onrender.com/api"
+    "VITE_API_URL": "https://speech-to-text-ial4.onrender.com"
   }
 }

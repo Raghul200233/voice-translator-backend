@@ -32,7 +32,7 @@ function App() {
   const recordingTimerRef = useRef(null);
   const [recordingTime, setRecordingTime] = useState(0);
   
-  const API_URL = 'http://localhost:5003/api';
+  const API_URL = 'https://speech-to-text-ial4.onrender.com';
   
   // Categories
   const categories = [

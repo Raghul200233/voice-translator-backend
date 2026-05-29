@@ -9,7 +9,9 @@ const Groq = require('groq-sdk');
 const mongoose = require('mongoose');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: 'https://speech-to-text-chi-lac.vercel.app'
+}));
 app.use(express.json());
 
 // ============ MONGODB SCHEMAS ============
