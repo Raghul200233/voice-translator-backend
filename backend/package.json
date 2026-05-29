@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Speech to Text API with Groq Whisper",
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
